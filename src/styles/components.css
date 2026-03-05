@@ -1,0 +1,45 @@
+.input-field {
+  margin-bottom: 1em;
+}
+.input-field label {
+  display: block;
+  margin-bottom: 0.3em;
+}
+.input-field input {
+  padding: 0.5em;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.result-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  padding: 1em;
+  border-radius: 6px;
+  margin-top: 1em;
+}
+.copy-button {
+  margin-top: 0.5em;
+}
+.error-box {
+  background: #ffd6d6;
+  color: var(--error);
+  padding: 0.5em;
+  border-radius: 4px;
+  margin-bottom: 1em;
+}
+.tabs {
+  display: flex;
+  gap: 0.5em;
+  margin-bottom: 1em;
+}
+.tabs button {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  padding: 0.5em 1em;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.tabs .active {
+  background: var(--primary);
+  color: #fff;
+}

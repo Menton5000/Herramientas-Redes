@@ -1,0 +1,21 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import IPv4Calculator from "../components/IPv4Calculator.astro";
+import IPv4Grouper from "../components/IPv4Grouper.astro";
+import IPv4Splitter from "../components/IPv4Splitter.astro";
+---
+
+<BaseLayout>
+    <div class="container">
+        <h1>Herramientas IPv4</h1>
+        <div class="card">
+            <IPv4Calculator />
+        </div>
+        <div class="card">
+            <IPv4Grouper />
+        </div>
+        <div class="card">
+            <IPv4Splitter />
+        </div>
+    </div>
+</BaseLayout>

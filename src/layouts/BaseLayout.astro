@@ -1,0 +1,101 @@
+---
+const pathname = Astro.url.pathname;
+---
+
+<html lang="es">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Herramientas de redes</title>
+        <style>
+            :root {
+                font-family:
+                    system-ui,
+                    -apple-system,
+                    Segoe UI,
+                    Roboto,
+                    Helvetica,
+                    Arial;
+            }
+            header {
+                padding: 1rem 1.5rem;
+                background: #0f172a;
+                color: white;
+                display: flex;
+                gap: 1rem;
+                align-items: center;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }
+            .nav-links {
+                display: flex;
+                gap: 0.5rem;
+            }
+            .nav-link {
+                color: hsl(213, 27%, 80%);
+                text-decoration: none;
+                font-weight: 500;
+                padding: 0.5rem 1rem;
+                border-radius: 6px;
+                transition: all 0.2s ease;
+            }
+            .nav-link:hover {
+                color: white;
+                background: #1e293b;
+            }
+            .nav-link.active {
+                color: white;
+            }
+            main {
+                padding: 1.25rem;
+                max-width: 1100px;
+                margin: 0 auto;
+            }
+            .container {
+                display: flex;
+                gap: 1rem;
+                flex-wrap: wrap;
+            }
+            .card {
+                background: white;
+                border: 1px solid #e6eef8;
+                border-radius: 8px;
+                padding: 1rem;
+                box-shadow: 0 1px 2px rgba(2, 6, 23, 0.04);
+                flex: 1 1 420px;
+            }
+            body {
+                background: #f8fafc;
+                margin: 0;
+            }
+            h1 {
+                margin: 0;
+                font-size: 1.25rem;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>Herramientas de redes</h1>
+            <nav class="nav-links">
+                <a
+                    href="/"
+                    class={`nav-link ${pathname === "/" ? "active" : ""}`}
+                    >Inicio</a
+                >
+                <a
+                    href="/ipv4"
+                    class={`nav-link ${pathname === "/ipv4" || pathname === "/ipv4/" ? "active" : ""}`}
+                    >IPv4</a
+                >
+                <a
+                    href="/ipv6"
+                    class={`nav-link ${pathname === "/ipv6" || pathname === "/ipv6/" ? "active" : ""}`}
+                    >IPv6</a
+                >
+            </nav>
+        </header>
+        <main>
+            <slot />
+        </main>
+    </body>
+</html>

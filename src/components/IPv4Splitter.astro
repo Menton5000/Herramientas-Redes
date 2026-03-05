@@ -1,0 +1,258 @@
+---
+
+---
+
+<div class="card">
+    <h2>Divisor / Subnetting IPv4</h2>
+
+    <div>
+        <label>Dirección de red (con /prefijo o máscara):</label>
+        <input
+            id="net-split"
+            placeholder="192.168.1.0/24 or 192.168.1.0 255.255.255.0"
+            style="width:100%;padding:.4rem;border:1px solid #cbd5e1;border-radius:6px"
+        />
+    </div>
+    <div style="margin-top:.5rem">
+        <label>Cantidad de subredes:</label>
+        <input
+            id="count-split"
+            type="number"
+            min="1"
+            value="4"
+            style="width:6rem;padding:.25rem;border:1px solid #cbd5e1;border-radius:6px"
+        />
+    </div>
+    <div style="margin-top:.5rem">
+        <button id="split-split">Dividir</button>
+        <button id="clear-split">Limpiar</button>
+    </div>
+    <div
+        id="out-split"
+        style="margin-top:1rem;font-family:monospace;white-space:pre-wrap"
+    >
+    </div>
+
+    <style>
+        button {
+            padding: 0.35rem 0.6rem;
+            margin-right: 0.4rem;
+        }
+    </style>
+
+    <script type="module">
+        const netEl = document.getElementById("net-split");
+        const countEl = document.getElementById("count-split");
+        const out = document.getElementById("out-split");
+        const splitBtn = document.getElementById("split-split");
+        const clearBtn = document.getElementById("clear-split");
+
+        function ipToInt(ip) {
+            const parts = ip
+                .trim()
+                .split(".")
+                .map((n) => parseInt(n, 10));
+            if (
+                parts.length !== 4 ||
+                parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)
+            )
+                throw new Error("IPv4 inválida: " + ip);
+            return (
+                (((parts[0] << 24) >>> 0) +
+                    ((parts[1] << 16) >>> 0) +
+                    ((parts[2] << 8) >>> 0) +
+                    (parts[3] >>> 0)) >>>
+                0
+            );
+        }
+        function intToIp(i) {
+            return [
+                (i >>> 24) & 255,
+                (i >>> 16) & 255,
+                (i >>> 8) & 255,
+                i & 255,
+            ].join(".");
+        }
+        function maskToPrefix(mask) {
+            mask = mask.trim();
+            if (mask.startsWith("/")) return parseInt(mask.slice(1), 10);
+            if (/^[0-9.]+$/.test(mask)) {
+                const m = ipToInt(mask);
+                let c = 0;
+                for (let i = 31; i >= 0; i--) {
+                    if (((m >>> i) & 1) === 1) c++;
+                    else break;
+                }
+                return c;
+            }
+            return null;
+        }
+        function prefixToMaskInt(prefix) {
+            if (prefix === 0) return 0;
+            return ((0xffffffff << (32 - prefix)) >>> 0) >>> 0;
+        }
+
+        function computeNetworkFrom(ipInt, prefix) {
+            const maskInt = prefixToMaskInt(prefix) >>> 0;
+            const network = (ipInt & maskInt) >>> 0;
+            const broadcast = (network | (~maskInt >>> 0)) >>> 0;
+            const blockSize = Math.pow(2, 32 - prefix);
+            let hostsCount;
+            if (prefix >= 31) hostsCount = prefix === 32 ? 1 : 2;
+            else hostsCount = Math.pow(2, 32 - prefix) - 2;
+            const first =
+                prefix === 32 ? network : prefix === 31 ? network : network + 1;
+            const last =
+                prefix === 32
+                    ? network
+                    : prefix === 31
+                      ? network + 1
+                      : broadcast - 1;
+            return {
+                maskInt,
+                network,
+                broadcast,
+                hostsCount,
+                first,
+                last,
+                blockSize,
+            };
+        }
+
+        function nextPowerOfTwo(n) {
+            let p = 1;
+            while (p < n) p <<= 1;
+            return p;
+        }
+
+        function split() {
+            try {
+                const raw = netEl.value.trim();
+                if (!raw) {
+                    out.textContent = "Introduce una red.";
+                    return;
+                }
+                // parse input: either 'ip/prefix' or 'ip mask'
+                let ipPart = raw;
+                let prefix = null;
+                if (raw.includes("/")) {
+                    const [a, p] = raw.split("/");
+                    ipPart = a.trim();
+                    prefix = parseInt(p.trim(), 10);
+                } else if (raw.includes(" ")) {
+                    const [a, m] = raw.split(/\s+/);
+                    ipPart = a.trim();
+                    prefix = maskToPrefix(m.trim());
+                } else {
+                    throw new Error(
+                        "Formato de red no reconocido. Use 192.168.1.0/24 o 192.168.1.0 255.255.255.0",
+                    );
+                }
+                if (Number.isNaN(prefix) || prefix < 0 || prefix > 32)
+                    throw new Error("Prefijo inválido");
+                const count = parseInt(countEl.value, 10);
+                if (isNaN(count) || count < 1)
+                    throw new Error("Cantidad inválida");
+
+                const ipInt = ipToInt(ipPart);
+                const base = computeNetworkFrom(ipInt, prefix);
+                if (ipInt >>> 0 !== base.network) {
+                    // adjust to network base
+                }
+
+                const needed = Math.ceil(Math.log2(count));
+                const actualSubnets = Math.pow(2, needed);
+                const newPrefix = prefix + needed;
+                if (newPrefix > 32)
+                    throw new Error("No es posible dividir en tantas subredes");
+                const newBlock = Math.pow(2, 32 - newPrefix);
+
+                let lines = [];
+                if (actualSubnets !== count) {
+                    lines.push(
+                        "Nota: se generan " +
+                            actualSubnets +
+                            " subredes (potencia de 2) para cubrir " +
+                            count +
+                            " solicitadas.",
+                    );
+                }
+                lines.push(
+                    "Red base: " +
+                        intToIp(base.network) +
+                        "/" +
+                        prefix +
+                        "  Máscara: " +
+                        intToIp(base.maskInt),
+                );
+                lines.push(
+                    "Dividiendo en " +
+                        actualSubnets +
+                        " subredes de tamaño /" +
+                        newPrefix +
+                        " (bloque " +
+                        newBlock +
+                        " direcciones)",
+                );
+                lines.push("");
+
+                for (let i = 0; i < actualSubnets; i++) {
+                    const net = (base.network + i * newBlock) >>> 0;
+                    const broadcast = (net + newBlock - 1) >>> 0;
+                    const first =
+                        newPrefix === 32
+                            ? net
+                            : newPrefix === 31
+                              ? net
+                              : (net + 1) >>> 0;
+                    const last =
+                        newPrefix === 32
+                            ? net
+                            : newPrefix === 31
+                              ? (net + 1) >>> 0
+                              : (broadcast - 1) >>> 0;
+                    const hosts =
+                        newPrefix >= 31
+                            ? newPrefix === 32
+                                ? 1
+                                : 2
+                            : Math.pow(2, 32 - newPrefix) - 2;
+                    if (i < count) {
+                        lines.push(
+                            "[" +
+                                (i + 1) +
+                                "] " +
+                                intToIp(net) +
+                                "/" +
+                                newPrefix,
+                        );
+                        lines.push(
+                            "    Máscara: " +
+                                intToIp(prefixToMaskInt(newPrefix)),
+                        );
+                        lines.push("    Broadcast: " + intToIp(broadcast));
+                        lines.push(
+                            "    Primera: " +
+                                intToIp(first) +
+                                "  Última: " +
+                                intToIp(last),
+                        );
+                        lines.push("    Hosts útiles: " + hosts);
+                        lines.push("");
+                    }
+                }
+
+                out.textContent = lines.join("\n");
+            } catch (e) {
+                out.textContent = "Error: " + e.message;
+            }
+        }
+
+        splitBtn.addEventListener("click", split);
+        clearBtn.addEventListener("click", () => {
+            netEl.value = "";
+            countEl.value = "4";
+            out.textContent = "";
+        });
+    </script>
+</div>

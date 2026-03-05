@@ -1,0 +1,124 @@
+---
+
+---
+
+<div class="card">
+    <h2>Agrupador / Supernetting IPv4</h2>
+    <div>
+        <label
+            >Lista de direcciones (una por línea, acepta /prefix opcional):</label
+        >
+        <textarea
+            id="list"
+            rows="8"
+            style="width:100%;padding:.5rem;border:1px solid #cbd5e1;border-radius:6px"
+            placeholder="192.168.1.1\n10.0.0.5/24"></textarea>
+    </div>
+    <div style="margin-top:.5rem">
+        <button id="group">Agrupar</button>
+        <button id="clear">Limpiar</button>
+    </div>
+    <div
+        id="out"
+        style="margin-top:1rem;font-family:monospace;white-space:pre-wrap"
+    >
+    </div>
+
+    <style>
+        button {
+            padding: 0.35rem 0.6rem;
+            margin-right: 0.4rem;
+        }
+    </style>
+
+    <script type="module">
+        const ta = document.getElementById("list");
+        const btn = document.getElementById("group");
+        const clr = document.getElementById("clear");
+        const out = document.getElementById("out");
+
+        function ipToInt(ip) {
+            const parts = ip
+                .trim()
+                .split(".")
+                .map((n) => parseInt(n));
+            if (
+                parts.length !== 4 ||
+                parts.some((p) => isNaN(p) || p < 0 || p > 255)
+            )
+                throw new Error("IPv4 inválida: " + ip);
+            return (
+                ((parts[0] << 24) >>> 0) +
+                ((parts[1] << 16) >>> 0) +
+                ((parts[2] << 8) >>> 0) +
+                (parts[3] >>> 0)
+            );
+        }
+        function intToIp(i) {
+            return [
+                (i >>> 24) & 255,
+                (i >>> 16) & 255,
+                (i >>> 8) & 255,
+                i & 255,
+            ].join(".");
+        }
+        function prefixToMaskInt(prefix) {
+            if (prefix === 0) return 0;
+            return (0xffffffff << (32 - prefix)) >>> 0;
+        }
+
+        function parseLine(line) {
+            // Use the base address of the entry (ignore /prefix for minimal enclosing calculation)
+            line = line.trim();
+            if (!line) return null;
+            const addr = line.split("/")[0].trim();
+            const ip = ipToInt(addr);
+            return ip;
+        }
+
+        function commonPrefixLength(a, b) {
+            let x = (a ^ b) >>> 0; // differing bits
+            if (x === 0) return 32;
+            let l = 0;
+            for (let i = 31; i >= 0; i--) {
+                if (((x >>> i) & 1) === 0) l++;
+                else break;
+            }
+            return l;
+        }
+
+        function group() {
+            try {
+                const lines = ta.value
+                    .split("\n")
+                    .map((l) => l.trim())
+                    .filter(Boolean);
+                if (lines.length === 0) {
+                    out.textContent = "No hay direcciones";
+                    return;
+                }
+                const addrs = lines.map(parseLine);
+                const min = Math.min(...addrs);
+                const max = Math.max(...addrs);
+                // find common prefix between min and max (minimal enclosing prefix)
+                const prefix = commonPrefixLength(min, max);
+                const mask = prefixToMaskInt(prefix);
+                const network = (min & mask) >>> 0;
+                const broadcast = (network | (~mask >>> 0)) >>> 0;
+                out.textContent = [
+                    "Red que engloba: " + intToIp(network) + "/" + prefix,
+                    "Máscara: " + intToIp(mask),
+                    "Broadcast: " + intToIp(broadcast),
+                ].join("\n");
+            } catch (e) {
+                out.textContent = "Error: " + e.message;
+            }
+        }
+
+        btn.addEventListener("click", group);
+        clr.addEventListener("click", () => {
+            ta.value = "";
+            out.textContent = "";
+        });
+    </script>
+</div>

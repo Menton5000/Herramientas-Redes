@@ -1,0 +1,13 @@
+:root {
+  --primary: #0078d4;
+  --secondary: #2d2d2d;
+  --error: #d40000;
+  --card-bg: #fff;
+  --card-border: #e0e0e0;
+}
+.tool-layout h2 {
+  color: var(--primary);
+}
+.error {
+  color: var(--error);
+}
