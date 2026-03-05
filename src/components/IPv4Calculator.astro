@@ -360,14 +360,13 @@
                     maskInt = prefixToMaskInt(prefix) >>> 0;
                     if (maskv && maskv.startsWith("/")) {
                         setEl("netMaskLabel", `= ${intToIp(maskInt)}`);
+                        elMask.placeholder = "255.255.255.0 o /24";
                     } else if (maskv) {
                         setEl("netMaskLabel", `= /${prefix}`);
+                        elMask.placeholder = "255.255.255.0 o /24";
                     } else {
-                        setEl(
-                            "netMaskLabel",
-                            `(Inferida) = /${prefix} = ${intToIp(maskInt)}`,
-                            true,
-                        );
+                        setEl("netMaskLabel", "");
+                        elMask.placeholder = `${intToIp(maskInt)} o /${prefix} (inferida)`;
                     }
 
                     setEl("netMaskBinary", toBinary(maskInt));
