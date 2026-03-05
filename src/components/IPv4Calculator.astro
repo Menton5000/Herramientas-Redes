@@ -71,20 +71,14 @@
             </tr>
 
             <tr>
-                <td><b>Dirección de red</b></td>
-                <td><span id="netAddress"></span></td>
-                <td><span id="netAddressBinary"></span></td>
-            </tr>
-
-            <tr>
                 <td><b>Clase de IP</b></td>
                 <td><span id="ipClass"></span></td>
                 <td></td>
             </tr>
-
             <tr>
-                <td><b>Notas</b></td>
-                <td colspan="2"><span id="networkNotes"></span></td>
+                <td><b>Dirección de red</b></td>
+                <td><span id="netAddress"></span></td>
+                <td><span id="netAddressBinary"></span></td>
             </tr>
 
             <tr>
@@ -109,6 +103,11 @@
                 <td><b>Anfitriones en red</b></td>
                 <td><span id="hostsNet"></span></td>
                 <td></td>
+            </tr>
+
+            <tr>
+                <td><b>Notas</b></td>
+                <td colspan="2"><span id="networkNotes"></span></td>
             </tr>
         </tbody>
     </table>
@@ -165,6 +164,10 @@
             width: 40%;
             color: #64748b;
         }
+        .text-muted {
+            color: #9ca3af !important;
+            font-style: italic;
+        }
     </style>
 
     <script type="module">
@@ -173,21 +176,24 @@
         const errEl = document.getElementById("error-msg");
         const warnEl = document.getElementById("warning-msg");
 
-        function ipToInt(ip) {
-            const parts = ip
-                .trim()
-                .split(".")
-                .map((n) => parseInt(n));
-            if (
-                parts.length !== 4 ||
-                parts.some((p) => isNaN(p) || p < 0 || p > 255)
-            )
-                throw new Error("IPv4 inválida");
+        function parseIp(ip) {
+            if (!ip) return null;
+            let parts = ip.trim().split(".");
+            // Si el usuario escribe "192." ignorar el último punto vacío
+            if (parts.length > 0 && parts[parts.length - 1] === "") {
+                parts.pop();
+            }
+            if (parts.length === 0 || parts.length > 4) return null;
+            const parsed = parts.map((n) => parseInt(n));
+            if (parsed.some((p) => isNaN(p) || p < 0 || p > 255)) return null;
+
+            // Rellenar con ceros (ej: 192.168 -> 192.168.0.0)
+            while (parsed.length < 4) parsed.push(0);
             return (
-                ((parts[0] << 24) >>> 0) +
-                ((parts[1] << 16) >>> 0) +
-                ((parts[2] << 8) >>> 0) +
-                (parts[3] >>> 0)
+                ((parsed[0] << 24) >>> 0) +
+                ((parsed[1] << 16) >>> 0) +
+                ((parsed[2] << 8) >>> 0) +
+                (parsed[3] >>> 0)
             );
         }
 
@@ -213,9 +219,15 @@
 
         function maskToPrefix(mask) {
             mask = mask.trim();
-            if (mask.startsWith("/")) return parseInt(mask.slice(1));
+            if (!mask) return null;
+            if (mask.startsWith("/")) {
+                const p = parseInt(mask.slice(1));
+                if (isNaN(p) || p < 0 || p > 32) return null;
+                return p;
+            }
             if (/^[0-9.]+$/.test(mask)) {
-                const m = ipToInt(mask);
+                const m = parseIp(mask);
+                if (m === null) return null;
                 let c = 0;
                 for (let i = 31; i >= 0; i--) {
                     if ((m >>> i) & 1) c++;
@@ -231,143 +243,206 @@
             return (0xffffffff << (32 - prefix)) >>> 0;
         }
 
+        function setEl(id, text, isMuted = false) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = text;
+            if (isMuted) el.classList.add("text-muted");
+            else el.classList.remove("text-muted");
+        }
+
+        function clearIpOutputs() {
+            setEl("ipAddressBinary", "");
+            setEl("ipClass", "");
+        }
+
+        function clearMaskOutputs() {
+            setEl("netMaskLabel", "");
+            setEl("netMaskBinary", "");
+            setEl("wildcard", "");
+            setEl("wildcardBinary", "");
+            setEl("hostsNet", "");
+        }
+
+        function clearCombinedOutputs() {
+            setEl("netAddress", "");
+            setEl("netAddressBinary", "");
+            setEl("brodcastAddress", "");
+            setEl("brodcastAddressBinary", "");
+            setEl("hostMin", "");
+            setEl("hostMinBinary", "");
+            setEl("hostMax", "");
+            setEl("hostMaxBinary", "");
+        }
+
         function compute() {
             try {
                 const ipv = elIp.value.trim();
                 const maskv = elMask.value.trim();
-                if (!ipv || !maskv) {
-                    errEl.textContent = "";
-                    warnEl.textContent = "";
+
+                errEl.textContent = "";
+                warnEl.textContent = "";
+
+                if (!ipv && !maskv) {
+                    clearIpOutputs();
+                    clearMaskOutputs();
+                    clearCombinedOutputs();
+                    setEl("networkNotes", "Ninguna", true);
                     return;
                 }
 
-                const ipInt = ipToInt(ipv);
+                let ipInt = null;
+                if (ipv) {
+                    ipInt = parseIp(ipv);
+                    if (ipInt === null)
+                        throw new Error("Dirección IPv4 inválida");
+                }
 
-                const firstOctet = (ipInt >>> 24) & 0xff;
-                let cls = "";
-                if (firstOctet <= 127) cls = "A";
-                else if (firstOctet <= 191) cls = "B";
-                else if (firstOctet <= 223) cls = "C";
-                else if (firstOctet <= 239) cls = "D";
-                else cls = "E";
+                let prefix = null;
+                if (maskv) {
+                    prefix = maskToPrefix(maskv);
+                    if (prefix === null) throw new Error("Máscara inválida");
+                }
+
+                // Inferir máscara a base de IPs especiales si el usuario no introduce una
+                if (ipInt !== null && prefix === null && !maskv) {
+                    const firstOctet = (ipInt >>> 24) & 0xff;
+                    if (ipInt === 0xffffffff)
+                        prefix = 32; // 255.255.255.255
+                    else if (firstOctet === 127)
+                        prefix = 8; // 127.x.x.x Loopback
+                    else if (firstOctet === 0) prefix = 8; // 0.x.x.x This network
+                }
 
                 const notes = [];
-                if (firstOctet === 127) notes.push("Loopback");
-                if (firstOctet === 10) notes.push("Privada");
-                if (firstOctet === 172) {
-                    const second = (ipInt >>> 16) & 0xff;
-                    if (second >= 16 && second <= 31) notes.push("Privada");
-                }
-                if (firstOctet === 192) {
-                    const second = (ipInt >>> 16) & 0xff;
-                    if (second === 168) notes.push("Privada");
-                }
-                if (firstOctet === 169) {
-                    const second = (ipInt >>> 16) & 0xff;
-                    if (second === 254) notes.push("Link-local");
-                }
-                if (firstOctet === 0) notes.push("This network");
-                if (firstOctet >= 224 && firstOctet <= 239)
-                    notes.push("Multicast");
-                if (firstOctet >= 240 && firstOctet <= 255)
-                    notes.push("Reservado - Experimental");
-                if (ipInt === 0xffffffff) notes.push("Limited broadcast");
 
-                let prefix = maskToPrefix(maskv);
-                if (
-                    prefix === null ||
-                    isNaN(prefix) ||
-                    prefix < 0 ||
-                    prefix > 32
-                )
-                    throw new Error("Máscara inválida");
+                // LÓGICA IP
+                if (ipInt !== null) {
+                    const firstOctet = (ipInt >>> 24) & 0xff;
+                    let cls = "";
+                    if (firstOctet <= 127) cls = "A";
+                    else if (firstOctet <= 191) cls = "B";
+                    else if (firstOctet <= 223) cls = "C";
+                    else if (firstOctet <= 239) cls = "D";
+                    else cls = "E";
 
-                const maskInt = prefixToMaskInt(prefix) >>> 0;
-                const network = (ipInt & maskInt) >>> 0;
-                const broadcast = (network | (~maskInt >>> 0)) >>> 0;
-                let hostsCount;
-                if (prefix >= 31) hostsCount = prefix === 32 ? 1 : 2;
-                else hostsCount = Math.pow(2, 32 - prefix) - 2;
+                    if (firstOctet === 127) notes.push("Loopback");
+                    if (firstOctet === 10) notes.push("Privada");
+                    if (firstOctet === 172) {
+                        const second = (ipInt >>> 16) & 0xff;
+                        if (second >= 16 && second <= 31) notes.push("Privada");
+                    }
+                    if (firstOctet === 192) {
+                        const second = (ipInt >>> 16) & 0xff;
+                        if (second === 168) notes.push("Privada");
+                    }
+                    if (firstOctet === 169) {
+                        const second = (ipInt >>> 16) & 0xff;
+                        if (second >= 254 && second <= 254)
+                            notes.push("Link-local");
+                    }
+                    if (firstOctet === 0) notes.push("This network");
+                    if (firstOctet >= 224 && firstOctet <= 239)
+                        notes.push("Multicast");
+                    if (firstOctet >= 240 && firstOctet <= 255)
+                        notes.push("Reservado - Experimental");
+                    if (ipInt === 0xffffffff) notes.push("Limited broadcast");
 
-                const first =
-                    prefix === 32
-                        ? network
-                        : prefix === 31
-                          ? network
-                          : network + 1;
-                const last =
-                    prefix === 32
-                        ? network
-                        : prefix === 31
-                          ? network + 1
-                          : broadcast - 1;
-
-                document.getElementById("ipAddressBinary").textContent =
-                    toBinary(ipInt);
-
-                if (maskv.startsWith("/")) {
-                    document.getElementById("netMaskLabel").textContent =
-                        `= ${intToIp(maskInt)}`;
+                    setEl("ipAddressBinary", toBinary(ipInt));
+                    setEl("ipClass", `Clase ${cls}`);
                 } else {
-                    document.getElementById("netMaskLabel").textContent =
-                        `= /${prefix}`;
+                    clearIpOutputs();
                 }
 
-                document.getElementById("netMaskBinary").textContent =
-                    toBinary(maskInt);
+                // LÓGICA MÁSCARA
+                let maskInt = null;
+                if (prefix !== null) {
+                    maskInt = prefixToMaskInt(prefix) >>> 0;
+                    if (maskv && maskv.startsWith("/")) {
+                        setEl("netMaskLabel", `= ${intToIp(maskInt)}`);
+                    } else if (maskv) {
+                        setEl("netMaskLabel", `= /${prefix}`);
+                    } else {
+                        setEl(
+                            "netMaskLabel",
+                            `(Inferida) = /${prefix} = ${intToIp(maskInt)}`,
+                            true,
+                        );
+                    }
 
-                const wildcardInt = ~maskInt >>> 0;
-                document.getElementById("wildcard").textContent =
-                    intToIp(wildcardInt);
-                document.getElementById("wildcardBinary").textContent =
-                    toBinary(wildcardInt);
+                    setEl("netMaskBinary", toBinary(maskInt));
 
-                if (prefix >= 31) {
-                    document.getElementById("netAddress").textContent = "N/A";
-                    document.getElementById("netAddressBinary").textContent =
-                        "";
+                    const wildcardInt = ~maskInt >>> 0;
+                    setEl("wildcard", intToIp(wildcardInt));
+                    setEl("wildcardBinary", toBinary(wildcardInt));
+
+                    let hostsCount;
+                    if (prefix >= 31) hostsCount = prefix === 32 ? 1 : 2;
+                    else hostsCount = Math.pow(2, 32 - prefix) - 2;
+                    setEl("hostsNet", hostsCount);
+
+                    if (prefix === 31 || prefix === 32) {
+                        warnEl.textContent = `Aviso: Una máscara de /${prefix} resulta en redes sin hosts (se suele utilizar en enlaces Point-to-Point o Loopbacks). Es por ello que no se reservan direcciones para red ni broadcast.`;
+                    }
                 } else {
-                    document.getElementById("netAddress").textContent =
-                        `${intToIp(network)}/${prefix}`;
-                    document.getElementById("netAddressBinary").textContent =
-                        toBinary(network);
+                    clearMaskOutputs();
                 }
 
-                document.getElementById("ipClass").textContent =
-                    `Clase ${cls}` +
-                    (notes.length ? ` (${notes.join(", ")})` : "");
+                // LÓGICA COMBINADA (Requiere IP y Máscara)
+                if (ipInt !== null && prefix !== null) {
+                    const network = (ipInt & maskInt) >>> 0;
+                    const broadcast = (network | (~maskInt >>> 0)) >>> 0;
 
-                if (prefix >= 31) {
-                    document.getElementById("brodcastAddress").textContent =
-                        "N/A";
-                    document.getElementById(
-                        "brodcastAddressBinary",
-                    ).textContent = "";
+                    if (prefix === 31) notes.push("Punto a punto (RFC 3021)");
+                    if (prefix === 32)
+                        notes.push("Host único (Loopback/Host route)");
+                    if (prefix < 31 && ipInt === network)
+                        notes.push("La IP es dirección de red");
+                    if (prefix < 31 && ipInt === broadcast)
+                        notes.push("La IP es dirección de broadcast");
+
+                    const first =
+                        prefix === 32
+                            ? network
+                            : prefix === 31
+                              ? network
+                              : network + 1;
+                    const last =
+                        prefix === 32
+                            ? network
+                            : prefix === 31
+                              ? network + 1
+                              : broadcast - 1;
+
+                    if (prefix >= 31) {
+                        setEl("netAddress", "N/A", true);
+                        setEl("netAddressBinary", "");
+                        setEl("brodcastAddress", "N/A", true);
+                        setEl("brodcastAddressBinary", "");
+                    } else {
+                        setEl("netAddress", `${intToIp(network)}/${prefix}`);
+                        setEl("netAddressBinary", toBinary(network));
+                        setEl("brodcastAddress", intToIp(broadcast));
+                        setEl("brodcastAddressBinary", toBinary(broadcast));
+                    }
+
+                    setEl("hostMin", intToIp(first));
+                    setEl("hostMinBinary", toBinary(first));
+                    setEl("hostMax", intToIp(last));
+                    setEl("hostMaxBinary", toBinary(last));
                 } else {
-                    document.getElementById("brodcastAddress").textContent =
-                        intToIp(broadcast);
-                    document.getElementById(
-                        "brodcastAddressBinary",
-                    ).textContent = toBinary(broadcast);
+                    clearCombinedOutputs();
                 }
 
-                document.getElementById("hostMin").textContent = intToIp(first);
-                document.getElementById("hostMinBinary").textContent =
-                    toBinary(first);
-
-                document.getElementById("hostMax").textContent = intToIp(last);
-                document.getElementById("hostMaxBinary").textContent =
-                    toBinary(last);
-
-                document.getElementById("hostsNet").textContent = hostsCount;
-
-                errEl.textContent = "";
-
-                if (prefix === 31 || prefix === 32) {
-                    warnEl.textContent = `Aviso: Una máscara de /${prefix} resulta en redes sin hosts (se suele utilizar en enlaces Point-to-Point o Loopbacks). Es por ello que no se reservan direcciones para red ni broadcast.
-`;
+                // Asignar bloque de notas al final
+                if (notes.length) {
+                    setEl("networkNotes", notes.join(" | "));
                 } else {
-                    warnEl.textContent = "";
+                    if (ipInt !== null || prefix !== null) {
+                        setEl("networkNotes", "Ninguna", true);
+                    } else {
+                        setEl("networkNotes", "", true);
+                    }
                 }
             } catch (e) {
                 errEl.textContent = "Error: " + e.message;
